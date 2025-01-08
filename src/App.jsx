@@ -8,6 +8,7 @@ import Wishlist from "./page/wishlist";
 import Report from "./page/report";
 import Notes from "./page/notes";
 import { Toaster } from "react-hot-toast";
+import ForgotPassword from "./page/forgot-password";
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
           <Route path="/wishlist" element={<Wishlist />} />
           <Route path="/report" element={<Report />} />
           <Route path="/notes" element={<Notes />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
         </Routes>
       </BrowserRouter>
       <Toaster />

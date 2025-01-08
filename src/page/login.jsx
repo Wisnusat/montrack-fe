@@ -117,7 +117,7 @@ const LoginPage = () => {
             )}
             <div className="text-right">
               <a
-                href="#"
+                href="/forgot-password"
                 className="text-[#14C48B] font-medium text-[16px] underline tracking-[-0.02em]"
               >
                 Lupa kata sandi?

@@ -259,7 +259,9 @@ export default function Dashboard() {
                     <Card className="bg-zinc-900 border-0 rounded-lg">
                         <CardHeader className="flex flex-row items-center justify-between">
                             <CardTitle>Wishlist</CardTitle>
-                            <Button variant="ghost" size="icon"><Plus /></Button>
+                            <Link to={"/wishlist"}>
+                                <Button variant="ghost" size="icon"><Plus /></Button>
+                            </Link>
                         </CardHeader>
                         <CardContent>
                             <ScrollArea className="h-[180px]">
