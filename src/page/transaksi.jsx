@@ -2,58 +2,27 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import Sidebar from "@/components/ui/sidebar";
 import { Plus, Search } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
+import InputField from "@/components/ui/input-field";
+import toast from "react-hot-toast";
 
 const TransactionPage = () => {
   const [isAddTransactionOpen, setIsAddTransactionOpen] = useState(false);
-  const [selectedType, setSelectedType] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedType, setSelectedType] = useState("Pengeluaran");
   const [errors, setErrors] = useState({});
-
   const [transactionList, setTransactionList] = useState([]);
-  useEffect(() => {
-    const fetchTransactions = async () => {
-      try {
-        const userData = localStorage.getItem("user");
-        console.log("User data in localStorage:", userData); // Cek apakah ada data pengguna
-
-        if (!userData) {
-          setErrors({
-            form: "Data pengguna tidak ditemukan. Silakan login terlebih dahulu.",
-          });
-          return;
-        }
-
-        const user = JSON.parse(userData);
-        console.log("Fetched user:", user);
-
-        // Lakukan fetch transaksi setelah mendapatkan user data
-        const response = await axios.get(
-          `http://localhost:3000/transaction/${user.userId}`
-        );
-        // Verifikasi respons API
-        console.log("Respons API:", response);
-
-        // Mengecek apakah respons mengandung data transaksi
-        if (
-          response &&
-          response.data &&
-          Array.isArray(response.data.data) &&
-          response.data.data.length > 0
-        ) {
-          console.log("Data transaksi diterima:", response.data.data);
-          setTransactionList(response.data.data); // Menyimpan transaksi ke dalam state
-        } else {
-          console.log("Tidak ada transaksi untuk user ini.");
-        }
-      } catch (error) {
-        console.error("Error fetching transactions:", error);
-      }
-    };
-
-    fetchTransactions();
-  }, []);
+  const [totalIncome, setTotalIncome] = useState(0);
+  const [totalExpense, setTotalExpense] = useState(0);
+  const [userData, setUserData] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [formValues, setFormValues] = useState({
+    category: "",
+    amount: "",
+    date: "",
+    time: "",
+    description: "",
+  });
 
   // Fungsi untuk mengelompokkan transaksi per hari
   const groupTransactionsByDate = (transactions) => {
@@ -68,38 +37,6 @@ const TransactionPage = () => {
   };
 
   const groupedTransactions = groupTransactionsByDate(transactionList);
-
-  // State untuk menyimpan total pemasukan, pengeluaran, dan saldo
-  const [totalIncome, setTotalIncome] = useState(0);
-  const [totalExpense, setTotalExpense] = useState(0);
-  const [balance, setBalance] = useState(0);
-
-  // Fungsi untuk menghitung total pemasukan, pengeluaran, dan saldo
-  useEffect(() => {
-    let income = 0;
-    let expense = 0;
-
-    // Menghitung pemasukan dan pengeluaran berdasarkan jenis transaksi
-    transactionList.forEach((transaction) => {
-      if (transaction.type === "Pemasukan") {
-        income += transaction.amount; // Pemasukan
-      } else if (transaction.type === "Pengeluaran") {
-        expense += transaction.amount; // Pengeluaran
-      }
-    });
-
-    setTotalIncome(income);
-    setTotalExpense(expense);
-    setBalance(income - expense); // Menghitung saldo
-  }, [transactionList]);
-
-  const [formValues, setFormValues] = useState({
-    category: "",
-    amount: "",
-    date: "",
-    time: "",
-    description: "",
-  });
 
   const validateForm = () => {
     const newErrors = {};
@@ -119,6 +56,25 @@ const TransactionPage = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const updateUserSaldo = async (type, amount) => {
+    if (type == "pengeluaran") {
+      userData.saldo -= parseInt(amount)
+    } else {
+      userData.saldo += parseInt(amount)
+    }
+
+    try {
+      const response = await axios.put(`http://localhost:8080/api/users/${userData.userId}`, userData)
+      if (response.status == 200) {
+        setUserData(response.data.data)
+        localStorage.setItem("user", JSON.stringify(response.data.data))
+      }
+    } catch (err) {
+      console.error(err)
+      toast.error(err || "Failed update data")
+    }
+  }
+
   // Fungsi untuk mengirim data ke API
   const handleSubmit = async () => {
     if (!validateForm()) return;
@@ -135,38 +91,33 @@ const TransactionPage = () => {
       }
 
       // Membuat data yang akan dikirim ke backend
+      const selectedCategory = categories.find((category) => category.categoryId === parseInt(formValues.category));
       const dataToSend = {
-        type: selectedType,
-        category: formValues.category,
+        type: selectedType.toLowerCase(),
+        category: selectedCategory,
         amount: formValues.amount,
         date: formValues.date,
         time: formValues.time,
         description: formValues.description,
-        userId: user.userId,
+        user: userData,
       };
 
-      console.log("Data yang dikirim:", dataToSend);
-
       // Menggunakan axios untuk mengirim data ke backend
-      const response = await axios.post(
-        "http://localhost:3000/transaction",
-        dataToSend
-      );
+      const response = await axios.post("http://localhost:8080/api/transactions", dataToSend);
 
       // Menangani respon sukses dari backend
-      if (response.data.success) {
-        // Jika berhasil, tutup floating layer dan reset form
+      if (response.status === 200) {
+        updateUserSaldo(selectedType.toLowerCase(), formValues.amount)
         setIsAddTransactionOpen(false);
         setFormValues({
-          category: "",
+          category: {},
           amount: "",
           date: "",
           time: "",
           description: "",
         });
-        setSelectedType(""); // Reset selectedType setelah berhasil
+        setSelectedType("");
       } else {
-        // Jika gagal, tampilkan pesan error dari backend
         setErrors({ form: response.data.message });
       }
     } catch (error) {
@@ -174,6 +125,68 @@ const TransactionPage = () => {
       setErrors({ form: "Terjadi kesalahan. Coba lagi nanti." });
     }
   };
+
+  const fetchTransactions = async () => {
+    if (userData) {
+      try {
+        if (!userData) {
+          setErrors({
+            form: "Data pengguna tidak ditemukan. Silakan login terlebih dahulu.",
+          });
+          return;
+        }
+
+        // Lakukan fetch transaksi setelah mendapatkan user data
+        const response = await axios.get(
+          `http://localhost:8080/api/transactions/${userData.userId}`
+        );
+        if (response.status == 200) {
+          if (response.data.data) {
+            const expense = response.data.data
+              .filter((transaction) => transaction.type === "pengeluaran")
+              .reduce((sum, transaction) => sum + transaction.amount, 0)
+
+            const income = response.data.data
+              .filter((transaction) => transaction.type === "pemasukan")
+              .reduce((sum, transaction) => sum + transaction.amount, 0)
+
+            setTotalExpense(expense)
+            setTotalIncome(income)
+            setTransactionList(response.data.data)
+          }
+          toast.success(response.data.message || "Success fetching data");
+        }
+      } catch (error) {
+        toast.error("Error fetching transactions:", error);
+      }
+    }
+  };
+
+  const fetchCategories = async (type) => {
+    try {
+      const response = await axios.get(`http://localhost:8080/api/categories/${type.toLowerCase()}`);
+      if (response.status === 200) {
+        setCategories(response.data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+    }
+  }
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [userData]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const data = localStorage.getItem("user");
+      setUserData(JSON.parse(data));
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCategories("pengeluaran");
+  }, [])
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex w-screen overflow-x-hidden">
@@ -221,7 +234,7 @@ const TransactionPage = () => {
               <div className="bg-zinc-800 shadow-md rounded-lg p-3">
                 <div className="text-sm text-gray-400">Sisa Saldo</div>
                 <div className="text-2xl font-bold mt-1">
-                  Rp{balance.toLocaleString("id-ID")}
+                  Rp{userData?.saldo?.toLocaleString("id-ID") || 0}
                 </div>
               </div>
             </div>
@@ -250,21 +263,18 @@ const TransactionPage = () => {
                         <div className="text-base font-medium text-gray-300">
                           {item.description}
                         </div>{" "}
-                        {/* Deskripsi */}
                         <div className="text-sm text-gray-400">
-                          {item.category}
-                        </div>{" "}
-                        {/* Kategori */}
+                          {item.category.name}
+                        </div>
                       </div>
                     </div>
                     <h2
-                      className={`text-lg font-medium ${
-                        item.type === "Pemasukan"
-                          ? "text-green-500"
-                          : "text-red-500"
-                      }`}
+                      className={`text-lg font-medium ${item.type.toLowerCase() === "pemasukan"
+                        ? "text-green-500"
+                        : "text-red-500"
+                        }`}
                     >
-                      Rp{item.amount.toLocaleString()} {/* Format jumlah */}
+                      Rp{item.amount.toLocaleString("id-ID")}
                     </h2>
                   </div>
                 ))}
@@ -297,22 +307,20 @@ const TransactionPage = () => {
             </button>
             <div className="flex justify-center mb-8 space-x-4">
               <button
-                className={`px-6 py-1 rounded-[16px] border border-[#D5D5D5] ${
-                  selectedType === "Pengeluaran"
-                    ? "bg-[#48DE80] text-[#1C1B1B]"
-                    : "bg-transparent text-[#D5D5D5]"
-                }`}
-                onClick={() => setSelectedType("Pengeluaran")}
+                className={`px-6 py-1 rounded-[16px] border border-[#D5D5D5] ${selectedType === "Pengeluaran"
+                  ? "bg-[#48DE80] text-[#1C1B1B]"
+                  : "bg-transparent text-[#D5D5D5]"
+                  }`}
+                onClick={() => (setSelectedType("Pengeluaran"), fetchCategories("pengeluaran"))}
               >
                 Pengeluaran
               </button>
               <button
-                className={`px-6 py-1 rounded-[16px] ${
-                  selectedType === "Pemasukan"
-                    ? "bg-[#48DE80] text-[#1C1B1B]"
-                    : "bg-transparent text-[#D5D5D5] border border-[#D5D5D5]"
-                }`}
-                onClick={() => setSelectedType("Pemasukan")}
+                className={`px-6 py-1 rounded-[16px] ${selectedType === "Pemasukan"
+                  ? "bg-[#48DE80] text-[#1C1B1B]"
+                  : "bg-transparent text-[#D5D5D5] border border-[#D5D5D5]"
+                  }`}
+                onClick={() => (setSelectedType("Pemasukan"), fetchCategories("pemasukan"))}
               >
                 Pemasukan
               </button>
@@ -388,31 +396,15 @@ const TransactionPage = () => {
                       Tambahkan kategori
                     </option>
 
-                    {selectedType === "Pemasukan"
-                      ? ["Gaji", "Uang Saku", "Bonus", "Hadiah", "Lainnya"].map(
-                          (category) => (
-                            <option key={category} value={category}>
-                              {category}
-                            </option>
-                          )
-                        )
-                      : [
-                          "Makanan & Minuman",
-                          "Transportasi",
-                          "Pakaian",
-                          "Kesehatan",
-                          "Kecantikan",
-                          "Pendidikan",
-                          "Lainnya",
-                        ].map((category) => (
-                          <option
-                            key={category}
-                            value={category}
-                            className="bg-[#373636] hover:bg-[#414040] text-white"
-                          >
-                            {category}
-                          </option>
-                        ))}
+                    {categories.map((category) => (
+                      <option
+                        key={category.categoryId}
+                        value={category.categoryId}
+                        className="bg-[#373636] hover:bg-[#414040] text-white"
+                      >
+                        {category.name}
+                      </option>
+                    ))}
                   </select>
                   {errors.category && (
                     <p className="text-red-500 text-xs mt-1">
@@ -459,26 +451,4 @@ const TransactionPage = () => {
     </div>
   );
 };
-
-const InputField = ({ label, placeholder, type, value, onChange }) => (
-  <div className="flex flex-col">
-    <label
-      className="text-[#D6D5D5] font-medium mb-2"
-      style={{ fontSize: "16px", lineHeight: "25px", letterSpacing: "-0.02em" }}
-    >
-      {label}
-    </label>
-    <input
-      type={type}
-      placeholder={placeholder}
-      value={value}
-      onChange={onChange}
-      className="w-[280px] h-[40px] bg-[#1C1B1B] text-white px-4 py-2 rounded-[12px] focus:outline-none"
-      style={{
-        background: "rgba(255, 255, 255, 0.1)",
-        border: "1px solid rgba(255, 255, 255, 0.3)",
-      }}
-    />
-  </div>
-);
 export default TransactionPage;

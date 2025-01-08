@@ -1,17 +1,45 @@
 import { Button } from "@/components/ui/button";
 import Sidebar from "@/components/ui/sidebar";
-import { Plus, Search } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import { Plus, Search, X, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import InputField from "../components/ui/input-field";
+import toast from "react-hot-toast";
+import axios from "axios";
+import moment from "moment/moment";
 
 const Wishlist = () => {
   const [isAddWishlistOpen, setIsAddWishlistOpen] = useState(false);
   const [errors, setErrors] = useState({});
-
+  const [wishlists, setWishlists] = useState([]);
+  const [userData, setUserData] = useState(null);
   const [formValues, setFormValues] = useState({
     name: "",
     cost: "",
     saving: "",
   });
+
+  const fetchWishlist = async (isMessage) => {
+    if (userData) {
+      if (!userData) {
+        toast.error("Tidak ada data pengguna yang ditemukan. Silakan login kembali.")
+        return;
+      }
+
+      try {
+        const response = await axios.get(`http://localhost:8080/api/wishlists/${userData.userId}`)
+        if (response.status == 200) {
+          if (response.data.data) {
+            setWishlists(response.data.data)
+          }
+          if (isMessage) {
+            toast.success(response.data.message || "Success fetch data")
+          }
+        }
+      } catch (err) {
+        toast.error(err)
+      }
+    }
+  }
 
   const validateForm = () => {
     const newErrors = {};
@@ -32,51 +60,66 @@ const Wishlist = () => {
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    try {
-      // Ambil data user yang sedang login dari localStorage
-      const user = JSON.parse(localStorage.getItem("user"));
+    const cost = parseFloat(formValues.cost);
+    const saving = parseFloat(formValues.saving);
+    const createdAt = new Date().toISOString().split("T")[0];
 
-      if (!user || !user.userId) {
-        setErrors({
-          form: "Tidak ada data pengguna yang ditemukan. Silakan login kembali.",
-        });
+    try {
+      if (!userData) {
+        toast.error("Tidak ada data pengguna yang ditemukan. Silakan login kembali.")
         return;
       }
 
-      // Membuat data yang akan dikirim ke backend
       const dataToSend = {
+        user: userData,
         name: formValues.name,
-        cost: formValues.cost,
-        saving: formValues.saving,
-        userId: user.userId,
-      };
-
-      console.log("Data yang dikirim:", dataToSend);
-
-      // Menggunakan axios untuk mengirim data ke backend
-      const response = await axios.post(
-        "http://localhost:3000/transaction",
-        dataToSend
-      );
-
-      // Menangani respon sukses dari backend
-      if (response.data.success) {
-        // Jika berhasil, tutup floating layer dan reset form
-        setIsAddWishlistOpen(false);
-        setFormValues({
-          name: "",
-          cost: "",
-          saving: "",
-        });
-      } else {
-        // Jika gagal, tampilkan pesan error dari backend
-        setErrors({ form: response.data.message });
+        budget: cost,
+        saving: saving,
+        createdAt
       }
-    } catch (error) {
-      console.error("Error submitting transaction:", error);
-      setErrors({ form: "Terjadi kesalahan. Coba lagi nanti." });
+
+      const response = await axios.post(`http://localhost:8080/api/wishlists`, dataToSend);
+      if (response.status == 200) {
+        fetchWishlist(false)
+        toast.success(response.data.message)
+      }
+    } catch (err) {
+      toast.error(err || "Something went wrong, please try again later")
+    }
+
+    // Reset form
+    setFormValues({ name: "", cost: "", saving: "" });
+    setIsAddWishlistOpen(false);
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      if (!userData) {
+        toast.error("Tidak ada data pengguna yang ditemukan. Silakan login kembali.")
+        return;
+      }
+
+      const response = await axios.delete(`http://localhost:8080/api/wishlists/${id}`);
+      if (response.status == 200) {
+        fetchWishlist(false)
+        toast.success(response.data.message)
+      }
+    } catch (err) {
+      toast.error(err || "Something went wrong, please try again later")
     }
   };
+
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const data = localStorage.getItem("user");
+      setUserData(JSON.parse(data));
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchWishlist(true)
+  }, [userData])
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex w-screen overflow-x-hidden">
@@ -104,30 +147,90 @@ const Wishlist = () => {
             </Button>
           </div>
         </div>
+
+        {/* Wishlist Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {wishlists.map((wishlist, index) => (
+            <div
+              key={index}
+              className="relative bg-[#27272A] rounded-[16px] p-6 flex-col justify-between"
+              style={{ width: "100%", height: "200px" }}
+            >
+              {/* Nama Wishlist */}
+              <div>
+                <h2
+                  className="font-semibold mt-2"
+                  style={{
+                    fontSize: "29px",
+                    lineHeight: "36px",
+                    letterSpacing: "-0.03em",
+                    color: "#FFFFFF",
+                  }}
+                >
+                  {wishlist.name}
+                </h2>
+              </div>
+
+              {/* Tanggal */}
+              <div>
+                <p
+                  className="font-semibold mt-4"
+                  style={{
+                    fontSize: "38px",
+                    lineHeight: "40px",
+                    letterSpacing: "-0.03em",
+                    color: "#48DE80",
+                  }}
+                >
+                  {moment(wishlist.reachedDate).format("D MMM YYYY")}
+                </p>
+              </div>
+
+              {/* Saving */}
+              <div>
+                <p
+                  className="font-normal mt-3"
+                  style={{
+                    fontSize: "19px",
+                    lineHeight: "24px",
+                    letterSpacing: "-0.03em",
+                    color: "#D1D5DB",
+                  }}
+                >
+                  Rp{wishlist.saving.toLocaleString("id-ID")}/bulan
+                </p>
+              </div>
+
+              {/* Delete Button */}
+              <div className="absolute top-4 right-4 flex gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(wishlist.wishlistId);
+                  }}
+                  className="text-gray-300 hover:text-red-400"
+                >
+                  <Trash2 size={17} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </main>
 
       {/* Floating Layer */}
       {isAddWishlistOpen && (
         <div className="fixed top-0 left-0 w-screen h-screen bg-black bg-opacity-70 flex justify-center items-center z-[9999]">
-          <div className="bg-[#2C2B2B] rounded-[20px] p-10 w-[480px] h-[480px]">
+          <div className="bg-[#2C2B2B] rounded-[20px] p-10 w-[480px] h-[480px] relative">
             {/* Close Button */}
-            <button
-              className="absolute"
-              style={{
-                width: "28px",
-                height: "28px",
-                left: "975px",
-                top: "204px",
-              }}
-              onClick={() => setIsAddWishlistOpen(false)}
-            >
-              <img
-                src="/close-button.png"
-                alt="Close Button"
-                className="w-4 h-4"
-              />
-            </button>
-
+            <div className="absolute top-4 right-4 flex gap-2">
+              <button
+                className="text-gray-400 hover:text-gray-100"
+                onClick={() => setIsAddWishlistOpen(false)}
+              >
+                <X size={22} />
+              </button>
+            </div>
             {/* Form */}
             <div className="space-y-8">
               {/* Nama */}
@@ -191,27 +294,5 @@ const Wishlist = () => {
     </div>
   );
 };
-
-const InputField = ({ label, placeholder, type, value, onChange }) => (
-  <div className="flex flex-col">
-    <label
-      className="text-[#D6D5D5] font-medium mb-1"
-      style={{ fontSize: "16px", lineHeight: "25px", letterSpacing: "-0.02em" }}
-    >
-      {label}
-    </label>
-    <input
-      type={type}
-      placeholder={placeholder}
-      value={value}
-      onChange={onChange}
-      className="w-[368px] h-[40px] bg-[#1C1B1B] text-white px-4 py-2 rounded-[12px] focus:outline-none"
-      style={{
-        background: "rgba(255, 255, 255, 0.1)",
-        border: "1px solid rgba(255, 255, 255, 0.3)",
-      }}
-    />
-  </div>
-);
 
 export default Wishlist;

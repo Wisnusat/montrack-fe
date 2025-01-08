@@ -6,6 +6,8 @@ import TransactionPage from "./page/transaksi";
 import Dashboard from "./page/dashboard";
 import Wishlist from "./page/wishlist";
 import Report from "./page/report";
+import Notes from "./page/notes";
+import { Toaster } from "react-hot-toast";
 
 function App() {
   return (
@@ -18,8 +20,10 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/wishlist" element={<Wishlist />} />
           <Route path="/report" element={<Report />} />
+          <Route path="/notes" element={<Notes />} />
         </Routes>
       </BrowserRouter>
+      <Toaster />
     </>
   );
 }
